@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows;
 using Microsoft.Win32;
 using DotNetDBF;
@@ -36,73 +37,102 @@ namespace DBFDuplicateRemover
         {
             if (string.IsNullOrEmpty(dbfFilePath))
             {
-                MessageBox.Show("Выберите файл перед обработкой.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Выберите файл перед обработкой.", "Ошибка",
+                                MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             try
             {
                 RemoveDuplicates(dbfFilePath);
-                MessageBox.Show("Обработка завершена успешно.", "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("Обработка завершена успешно.", "Готово",
+                                MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Ошибка обработки: " + ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Ошибка обработки: " + ex.Message, "Ошибка",
+                                MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private void RemoveDuplicates(string filePath)
         {
-            List<object[]> records = new List<object[]>();
-            HashSet<string> uniqueKeys = new HashSet<string>();
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-            try
+            List<object[]> uniqueRecords = new List<object[]>();
+
+            HashSet<string> keys = new HashSet<string>();
+
+            DBFField[] originalFields;
+
+            using (FileStream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
             {
-                using (FileStream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.ReadWrite))
                 using (DBFReader reader = new DBFReader(fileStream))
                 {
-                    reader.CharEncoding = System.Text.Encoding.UTF8;
+                    reader.CharEncoding = Encoding.GetEncoding(866);
+                    originalFields = reader.Fields; 
+
+                    
+                    int idxAddr = Array.FindIndex(originalFields,
+                        f => f.Name.Equals("ADDRESID", StringComparison.OrdinalIgnoreCase));
+                    int idxKylic = Array.FindIndex(originalFields,
+                        f => f.Name.Equals("KYLIC", StringComparison.OrdinalIgnoreCase));
+                    int idxNdom = Array.FindIndex(originalFields,
+                        f => f.Name.Equals("NDOM", StringComparison.OrdinalIgnoreCase));
+                    int idxNkorp = Array.FindIndex(originalFields,
+                        f => f.Name.Equals("NKORP", StringComparison.OrdinalIgnoreCase));
+                    int idxNkw = Array.FindIndex(originalFields,
+                        f => f.Name.Equals("NKW", StringComparison.OrdinalIgnoreCase));
+                    int idxNkomn = Array.FindIndex(originalFields,
+                        f => f.Name.Equals("NKOMN", StringComparison.OrdinalIgnoreCase));
+                    int idxMonthdbt = Array.FindIndex(originalFields,
+                        f => f.Name.Equals("MONTHDBT", StringComparison.OrdinalIgnoreCase));
 
                     object[] record;
                     while ((record = reader.NextRecord()) != null)
                     {
-                        string key = string.Join("|", record[0], record[1], record[2], record[3], record[4], record[5]);
-
-                        if (!uniqueKeys.Contains(key))
+                       
+                        string key = string.Join("|", new object[]
                         {
-                            record[6] = null; // Устанавливаем MONTHDBT в NULL
-                            uniqueKeys.Add(key);
-                            records.Add(record);
+                            idxAddr  >= 0 ? record[idxAddr]  : "",
+                            idxKylic >= 0 ? record[idxKylic] : "",
+                            idxNdom  >= 0 ? record[idxNdom]  : "",
+                            idxNkorp >= 0 ? record[idxNkorp] : "",
+                            idxNkw   >= 0 ? record[idxNkw]   : "",
+                            idxNkomn >= 0 ? record[idxNkomn] : ""
+                        });
+
+                       
+                        if (!keys.Contains(key))
+                        {
+                           
+                            if (idxMonthdbt >= 0)
+                                record[idxMonthdbt] = null;
+
+                            keys.Add(key);
+                            uniqueRecords.Add(record);
                         }
+                       
                     }
                 }
+            }
 
-                using (FileStream fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+            
+            using (FileStream fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+            {
                 using (DBFWriter writer = new DBFWriter(fileStream))
                 {
-                    writer.CharEncoding = System.Text.Encoding.UTF8;
-                    writer.Fields = new DBFField[]
-                    {
-                new DBFField("ADDRESID", NativeDbType.Char, 20),
-                new DBFField("KYLIC", NativeDbType.Char, 50),
-                new DBFField("NDOM", NativeDbType.Char, 10),
-                new DBFField("NKORP", NativeDbType.Char, 10),
-                new DBFField("NKW", NativeDbType.Char, 10),
-                new DBFField("NKOMN", NativeDbType.Char, 10),
-                new DBFField("MONTHDBT", NativeDbType.Char, 10)
-                    };
+                    writer.CharEncoding = Encoding.GetEncoding(866);
+                  
+                    writer.Fields = originalFields;
 
-                    foreach (var record in records)
+                  
+                    foreach (var record in uniqueRecords)
                     {
-                        writer.AddRecord(record);
+                        writer.WriteRecord(record);
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка обработки файла: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
         }
-
     }
 }
