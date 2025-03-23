@@ -1,20 +1,52 @@
 ﻿<Window x:Class="DBFDuplicateRemover.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Удаление дубликатов из DBF" Height="200" Width="400">
+        Title="Удаление дубликатов из DBF" 
+        Height="230" 
+        Width="400">
     <Grid>
+        <!-- Четыре строки: 
+             1) поле для пути 
+             2) флажок 
+             3) кнопка "Выбрать папку" 
+             4) кнопка "Запуск обработки" 
+        -->
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBox Name="txtFilePath" IsReadOnly="True" Margin="10" Height="30"/>
+        <!-- Поле для отображения выбранной папки (только чтение) -->
+        <TextBox Name="txtFolderPath" 
+                 IsReadOnly="True" 
+                 Margin="10" 
+                 Height="30" />
 
-        <Button Grid.Row="1" Content="Выбрать файл" Width="150" Height="30" Margin="10"
-                HorizontalAlignment="Left" Click="BtnSelectFile_Click"/>
+        <!-- Флажок для управления очисткой поля MONTHDBT -->
+        <CheckBox Grid.Row="1"
+                  Name="chkClearMonthdbt"
+                  Margin="10"
+                  Content="Очищать MONTHDBT"
+                  IsChecked="True" />
 
-        <Button Grid.Row="2" Content="Запуск обработки" Width="150" Height="30" Margin="10"
-                HorizontalAlignment="Left" Click="BtnProcess_Click"/>
+        <!-- Кнопка для выбора папки -->
+        <Button Grid.Row="2" 
+                Content="Выбрать папку" 
+                Width="150" 
+                Height="30" 
+                Margin="10"
+                HorizontalAlignment="Left" 
+                Click="BtnSelectFolder_Click" />
+
+        <!-- Кнопка для запуска обработки -->
+        <Button Grid.Row="3" 
+                Content="Запуск обработки" 
+                Width="150" 
+                Height="30" 
+                Margin="10"
+                HorizontalAlignment="Left" 
+                Click="BtnProcess_Click" />
     </Grid>
 </Window>
