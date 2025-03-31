@@ -217,7 +217,7 @@ namespace DBFDuplicateRemover
                         else
                         {
                             // При необходимости очищаем MONTHDBT (зависит от флажка chkClearMonthdbt)
-                            if (idxMonthdbt >= 0)
+                            if (idxMonthdbt > 0)
                             {
                                 record[idxMonthdbt] = null;
                             }
@@ -236,6 +236,8 @@ namespace DBFDuplicateRemover
                 {
                     // Снова устанавливаем кодировку
                     writer.CharEncoding = Encoding.GetEncoding(866);
+
+                    writer.LanguageDriver = 0x65;
 
                     // Восстанавливаем исходные поля DBF
                     writer.Fields = originalFields;
