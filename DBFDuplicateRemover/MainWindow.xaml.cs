@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Windows;
-using System.Windows.Forms; 
+using System.Windows.Forms;
 using DotNetDBF;
 
 namespace DBFDuplicateRemover
@@ -14,12 +14,14 @@ namespace DBFDuplicateRemover
     {
         public string FileName { get; set; }            // Полный путь к файлу
         public int DuplicatesCount { get; set; }        // Сколько дубликатов было удалено
-        public List<string> DuplicatesKeys { get; set; } = new List<string>(); // Список ключей удалённых дубликатов
+        public List<string> DuplicatesKeys { get; set; } = new List<string>();
+
+        // Внутренний флаг: был ли файл пропущен из-за отсутствия ключевых полей
+        public bool IsSkipped { get; set; }
     }
 
     public partial class MainWindow : Window
     {
-        // Поле, в котором будет храниться путь к выбранной папке
         private string selectedFolder;
 
         public MainWindow()
@@ -27,10 +29,8 @@ namespace DBFDuplicateRemover
             InitializeComponent();
         }
 
-        // Обработчик для кнопки "Выбрать папку"
         private void BtnSelectFolder_Click(object sender, RoutedEventArgs e)
         {
-            
             using (var folderBrowser = new FolderBrowserDialog())
             {
                 var result = folderBrowser.ShowDialog();
@@ -42,13 +42,10 @@ namespace DBFDuplicateRemover
             }
         }
 
-        // Обработчик для кнопки "Запуск обработки"
         private void BtnProcess_Click(object sender, RoutedEventArgs e)
         {
-            // Проверяем, выбрана ли папка
             if (string.IsNullOrEmpty(selectedFolder))
             {
-                
                 System.Windows.MessageBox.Show("Выберите папку перед обработкой.",
                                 "Ошибка",
                                 MessageBoxButton.OK,
@@ -58,10 +55,8 @@ namespace DBFDuplicateRemover
 
             try
             {
-                // Получаем все файлы с расширением .dbf в выбранной папке (без поддиректорий)
                 var dbfFiles = Directory.GetFiles(selectedFolder, "*.dbf");
 
-                // Если в папке нет DBF-файлов, сообщаем об этом и выходии
                 if (dbfFiles.Length == 0)
                 {
                     System.Windows.MessageBox.Show("В выбранной папке нет файлов DBF.",
@@ -71,40 +66,25 @@ namespace DBFDuplicateRemover
                     return;
                 }
 
-                // Список, где будеи накапливать информацию о дубликатах по каждому файлу
                 var allResults = new List<DuplicateRemovalResult>();
 
-                // Обрабатываем каждый файл, удаляя из него дубликаты
                 foreach (var dbfFilePath in dbfFiles)
                 {
-                    // Возвращаем результат (сколько дубликатов и какие ключи)
                     var result = RemoveDuplicates(dbfFilePath);
                     allResults.Add(result);
                 }
 
-                // Формируем сводку для отображения в сообщении
-                var sbSummary = new StringBuilder();
-                sbSummary.AppendLine("Результаты обработки:");
+                // Подсчитываем общее кол-во проверенных файлов и сколько в них дублей (только для непропущенных)
+                int totalFiles = dbfFiles.Length;
+                int totalWithDuplicates = allResults
+                    .Where(r => !r.IsSkipped)      // пропущенные не считаем
+                    .Count(r => r.DuplicatesCount > 0);
 
-                foreach (var r in allResults)
-                {
-                    // Показываем в форме только название файла и кол-во дубликатов
-                    var fileNameOnly = Path.GetFileName(r.FileName);
-                    sbSummary.AppendLine($"{fileNameOnly}: удалено дубликатов - {r.DuplicatesCount}");
-                }
-
-                // Показываем сводку в MessageBox
-                System.Windows.MessageBox.Show(sbSummary.ToString(),
-                                "Сводка",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Information);
-
-                // Лог-файл в папке со всеми DBF, с датой и временем в названии
+                // Формируем имя лог-файла
                 string logFileName = Path.Combine(
                     selectedFolder,
                     $"dbfRemoveLog_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
 
-                // Записываем подробные сведения о дубликатах (только ключи)
                 using (var writer = new StreamWriter(logFileName, false, Encoding.UTF8))
                 {
                     writer.WriteLine("Лог-файл удаления дубликатов");
@@ -112,7 +92,8 @@ namespace DBFDuplicateRemover
                     writer.WriteLine("============================================");
                     writer.WriteLine();
 
-                    foreach (var r in allResults)
+                    // Пишем о файлах, у которых были дубликаты
+                    foreach (var r in allResults.Where(r => !r.IsSkipped && r.DuplicatesCount > 0))
                     {
                         writer.WriteLine($"Файл: {r.FileName}");
                         writer.WriteLine($"Удалено дубликатов: {r.DuplicatesCount}");
@@ -125,26 +106,30 @@ namespace DBFDuplicateRemover
                                 writer.WriteLine("  " + key);
                             }
                         }
-                        else
-                        {
-                            writer.WriteLine("Дубликаты не найдены.");
-                        }
-
                         writer.WriteLine("--------------------------------------------");
                         writer.WriteLine();
                     }
+
+                    // Итоговые данные 
+                    writer.WriteLine("--------------------------------------------");
+                    writer.WriteLine($"Всего проверено файлов: {totalFiles}");
+                    writer.WriteLine($"С дублями: {totalWithDuplicates}");
                 }
 
-                // Сообщаем пользователю, что всё готово
-                System.Windows.MessageBox.Show($"Обработка всех файлов DBF завершена успешно!\n" +
-                                $"Создан лог-файл: {Path.GetFileName(logFileName)}",
-                                "Готово",
+                // Итоговое окно 
+                var sbSummary = new StringBuilder();
+                sbSummary.AppendLine($"Проверено файлов: {totalFiles}");
+                sbSummary.AppendLine($"Из них с дублями: {totalWithDuplicates}");
+                sbSummary.AppendLine();
+                sbSummary.AppendLine($"Подробный отчет в файле: {Path.GetFileName(logFileName)}");
+
+                System.Windows.MessageBox.Show(sbSummary.ToString(),
+                                "Сводка",
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                // В случае ошибки выводим сообщение
                 System.Windows.MessageBox.Show("Ошибка обработки: " + ex.Message,
                                 "Ошибка",
                                 MessageBoxButton.OK,
@@ -152,74 +137,73 @@ namespace DBFDuplicateRemover
             }
         }
 
-        // Метод, удаляющий дубликаты в одном DBF-файле и возвращающий информацию о дубликатах
         private DuplicateRemovalResult RemoveDuplicates(string filePath)
         {
-            // Разрешаем использование дополнительных кодовых страниц
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-            // Списки и структуры для хранения уникальных записей
+            var result = new DuplicateRemovalResult
+            {
+                FileName = filePath,
+                DuplicatesCount = 0,
+                IsSkipped = false
+            };
+
             List<object[]> uniqueRecords = new List<object[]>();
             HashSet<string> keys = new HashSet<string>();
-
-            // Список ключей, которые попали в «дубликаты» (для лога)
             List<string> removedDuplicates = new List<string>();
 
             DBFField[] originalFields;
 
-            // Сначала считываем исходные записи из DBF
             using (FileStream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
             {
                 using (DBFReader reader = new DBFReader(fileStream))
                 {
-                    // Устанавливаем кодировку для чтения DBF (CP866)
                     reader.CharEncoding = Encoding.GetEncoding(866);
-
-                    // Запоминаем структуру полей (чтобы потом её же сохранить в выходном файле)
                     originalFields = reader.Fields;
 
-                    // Находим индексы полей, по которым нужно сформировать ключ
-                    int idxAddr = Array.FindIndex(originalFields,
-                        f => f.Name.Equals("ADDRESID", StringComparison.OrdinalIgnoreCase));
-                    int idxKylic = Array.FindIndex(originalFields,
-                        f => f.Name.Equals("KYLIC", StringComparison.OrdinalIgnoreCase));
-                    int idxNdom = Array.FindIndex(originalFields,
-                        f => f.Name.Equals("NDOM", StringComparison.OrdinalIgnoreCase));
-                    int idxNkorp = Array.FindIndex(originalFields,
-                        f => f.Name.Equals("NKORP", StringComparison.OrdinalIgnoreCase));
-                    int idxNkw = Array.FindIndex(originalFields,
-                        f => f.Name.Equals("NKW", StringComparison.OrdinalIgnoreCase));
-                    int idxNkomn = Array.FindIndex(originalFields,
-                        f => f.Name.Equals("NKOMN", StringComparison.OrdinalIgnoreCase));
-                    int idxMonthdbt = Array.FindIndex(originalFields,
-                        f => f.Name.Equals("MONTHDBT", StringComparison.OrdinalIgnoreCase));
+                    // Проверяем наличие нужных полей
+                    int idxAddr = Array.FindIndex(originalFields, f => f.Name.Equals("ADDRESID", StringComparison.OrdinalIgnoreCase));
+                    int idxKylic = Array.FindIndex(originalFields, f => f.Name.Equals("KYLIC", StringComparison.OrdinalIgnoreCase));
+                    int idxNdom = Array.FindIndex(originalFields, f => f.Name.Equals("NDOM", StringComparison.OrdinalIgnoreCase));
+                    int idxNkorp = Array.FindIndex(originalFields, f => f.Name.Equals("NKORP", StringComparison.OrdinalIgnoreCase));
+                    int idxNkw = Array.FindIndex(originalFields, f => f.Name.Equals("NKW", StringComparison.OrdinalIgnoreCase));
+                    int idxNkomn = Array.FindIndex(originalFields, f => f.Name.Equals("NKOMN", StringComparison.OrdinalIgnoreCase));
+                    int idxMonthdbt = Array.FindIndex(originalFields, f => f.Name.Equals("MONTHDBT", StringComparison.OrdinalIgnoreCase));
 
-                    // Считываем каждую запись, формируем ключ из нужных полей, проверяем на уникальность
+                    // Если не нашли хотя бы одно из основных полей — пропускаем файл
+                    if (idxAddr < 0 || idxKylic < 0 || idxNdom < 0 ||
+                        idxNkorp < 0 || idxNkw < 0 || idxNkomn < 0)
+                    {
+                        result.IsSkipped = true;
+                        return result;
+                    }
+
+                    // Иначе собираем уникальные записи
                     object[] record;
                     while ((record = reader.NextRecord()) != null)
                     {
-                        // Формируем ключ на основе выбранных полей
+                        // Формируем ключ
                         string key = string.Join("|", new object[]
                         {
-                            idxAddr  >= 0 ? record[idxAddr]  : "",
-                            idxKylic >= 0 ? record[idxKylic] : "",
-                            idxNdom  >= 0 ? record[idxNdom]  : "",
-                            idxNkorp >= 0 ? record[idxNkorp] : "",
-                            idxNkw   >= 0 ? record[idxNkw]   : "",
-                            idxNkomn >= 0 ? record[idxNkomn] : ""
+                            record[idxAddr],
+                            record[idxKylic],
+                            record[idxNdom],
+                            record[idxNkorp],
+                            record[idxNkw],
+                            record[idxNkomn]
                         });
 
-                        // Если такой ключ уже встречался, записываем его как «дубликат»
+                        // Проверяем на дубликат
                         if (keys.Contains(key))
                         {
                             removedDuplicates.Add(key);
                         }
                         else
                         {
-                            // При необходимости очищаем MONTHDBT (зависит от флажка chkClearMonthdbt)
-                            if (idxMonthdbt > 0)
+                            // Здесь учитывается чекбокс очистки MONTHDBT
+                            if (chkClearMonthdbt.IsChecked == true && idxMonthdbt >= 0)
                             {
-                                record[idxMonthdbt] = null;
+                                 record[idxMonthdbt] = null;
                             }
 
                             keys.Add(key);
@@ -229,34 +213,26 @@ namespace DBFDuplicateRemover
                 }
             }
 
-            // После того как все уникальные записи собраны, перезаписываем файл
+            // Если не пропущен, делаем перезапись файла
             using (FileStream fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write))
             {
                 using (DBFWriter writer = new DBFWriter(fileStream))
                 {
-                    // Снова устанавливаем кодировку
                     writer.CharEncoding = Encoding.GetEncoding(866);
+                    writer.LanguageDriver = 0x65; 
 
-                    writer.LanguageDriver = 0x65;
-
-                    // Восстанавливаем исходные поля DBF
                     writer.Fields = originalFields;
 
-                    // Записываем все уникальные записи обратно в файл
-                    foreach (var record in uniqueRecords)
+                    foreach (var rec in uniqueRecords)
                     {
-                        writer.WriteRecord(record);
+                        writer.WriteRecord(rec);
                     }
                 }
             }
 
-            // Формируем объект-результат: какой файл, сколько удалено и какие были ключи
-            var result = new DuplicateRemovalResult
-            {
-                FileName = filePath,
-                DuplicatesCount = removedDuplicates.Count,
-                DuplicatesKeys = removedDuplicates
-            };
+            // Заполняем остаток результата
+            result.DuplicatesCount = removedDuplicates.Count;
+            result.DuplicatesKeys = removedDuplicates;
 
             return result;
         }
