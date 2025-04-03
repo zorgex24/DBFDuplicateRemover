@@ -16,7 +16,7 @@ namespace DBFDuplicateRemover
         public int DuplicatesCount { get; set; }        // Сколько дубликатов было удалено
         public List<string> DuplicatesKeys { get; set; } = new List<string>();
 
-        // Внутренний флаг: был ли файл пропущен из-за отсутствия ключевых полей
+        // Флаг, что файл пропущен (если отсутствуют поля)
         public bool IsSkipped { get; set; }
     }
 
@@ -77,7 +77,7 @@ namespace DBFDuplicateRemover
                 // Подсчитываем общее кол-во проверенных файлов и сколько в них дублей (только для непропущенных)
                 int totalFiles = dbfFiles.Length;
                 int totalWithDuplicates = allResults
-                    .Where(r => !r.IsSkipped)      // пропущенные не считаем
+                    .Where(r => !r.IsSkipped)
                     .Count(r => r.DuplicatesCount > 0);
 
                 // Формируем имя лог-файла
@@ -87,7 +87,7 @@ namespace DBFDuplicateRemover
 
                 using (var writer = new StreamWriter(logFileName, false, Encoding.UTF8))
                 {
-                    writer.WriteLine("Лог-файл удаления дубликатов");
+                    writer.WriteLine("Лог-файл удаления дубликатов (с учётом поля SUMFIN)");
                     writer.WriteLine($"Создан: {DateTime.Now}");
                     writer.WriteLine("============================================");
                     writer.WriteLine();
@@ -137,6 +137,11 @@ namespace DBFDuplicateRemover
             }
         }
 
+        
+        /// Метод удаляющий дубликаты по ключу (ADDRESID, KYLIC, NDOM, NKORP, NKW, NKOMN),
+        /// с учётом поля SUMFIN — среди дублей оставляем запись с наибольшим SUMFIN,
+        /// при равенстве SUMFIN оставляем первую.
+        
         private DuplicateRemovalResult RemoveDuplicates(string filePath)
         {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -148,8 +153,14 @@ namespace DBFDuplicateRemover
                 IsSkipped = false
             };
 
+            // В этом списке мы временно храним записи (будем их заменять при необходимости)
             List<object[]> uniqueRecords = new List<object[]>();
-            HashSet<string> keys = new HashSet<string>();
+
+            
+            // Словарь, хронящий данные какой индекс занимает запись, и каков SUMFIN у неё
+            Dictionary<string, (decimal SumFin, int Index)> keyInfo
+                = new Dictionary<string, (decimal SumFin, int Index)>();
+
             List<string> removedDuplicates = new List<string>();
 
             DBFField[] originalFields;
@@ -161,14 +172,14 @@ namespace DBFDuplicateRemover
                     reader.CharEncoding = Encoding.GetEncoding(866);
                     originalFields = reader.Fields;
 
-                    // Проверяем наличие нужных полей
+                    // Проверяем наличие ключевых полей
                     int idxAddr = Array.FindIndex(originalFields, f => f.Name.Equals("ADDRESID", StringComparison.OrdinalIgnoreCase));
                     int idxKylic = Array.FindIndex(originalFields, f => f.Name.Equals("KYLIC", StringComparison.OrdinalIgnoreCase));
                     int idxNdom = Array.FindIndex(originalFields, f => f.Name.Equals("NDOM", StringComparison.OrdinalIgnoreCase));
                     int idxNkorp = Array.FindIndex(originalFields, f => f.Name.Equals("NKORP", StringComparison.OrdinalIgnoreCase));
                     int idxNkw = Array.FindIndex(originalFields, f => f.Name.Equals("NKW", StringComparison.OrdinalIgnoreCase));
                     int idxNkomn = Array.FindIndex(originalFields, f => f.Name.Equals("NKOMN", StringComparison.OrdinalIgnoreCase));
-                    int idxMonthdbt = Array.FindIndex(originalFields, f => f.Name.Equals("MONTHDBT", StringComparison.OrdinalIgnoreCase));
+                    int idxSumfin = Array.FindIndex(originalFields, f => f.Name.Equals("SUMFIN", StringComparison.OrdinalIgnoreCase));
 
                     // Если не нашли хотя бы одно из основных полей — пропускаем файл
                     if (idxAddr < 0 || idxKylic < 0 || idxNdom < 0 ||
@@ -178,7 +189,6 @@ namespace DBFDuplicateRemover
                         return result;
                     }
 
-                    // Иначе собираем уникальные записи
                     object[] record;
                     while ((record = reader.NextRecord()) != null)
                     {
@@ -193,33 +203,58 @@ namespace DBFDuplicateRemover
                             record[idxNkomn]
                         });
 
-                        // Проверяем на дубликат
-                        if (keys.Contains(key))
+                        // Определяем значение SUMFIN
+                        decimal currentSumfin = 0;
+                        if (idxSumfin >= 0 && record[idxSumfin] != null)
                         {
-                            removedDuplicates.Add(key);
+                            decimal.TryParse(record[idxSumfin].ToString(), out currentSumfin);
+                        }
+
+                        // Проверяем, встречался ли уже этот ключ
+                        if (!keyInfo.ContainsKey(key))
+                        {
+                            // Впервые встречаем ключ => добавляем запись
+                            int newIndex = uniqueRecords.Count;
+                            uniqueRecords.Add(record);
+
+                            keyInfo[key] = (currentSumfin, newIndex);
                         }
                         else
                         {
-                            // Здесь учитывается чекбокс очистки MONTHDBT
-                            if (chkClearMonthdbt.IsChecked == true && idxMonthdbt >= 0)
-                            {
-                                 record[idxMonthdbt] = null;
-                            }
+                            // Ключ уже есть => сравниваем SUMFIN
+                            var (oldSumfin, oldIndex) = keyInfo[key];
 
-                            keys.Add(key);
-                            uniqueRecords.Add(record);
+                            if (currentSumfin > oldSumfin)
+                            {
+                                // Новый SUMFIN больше => заменяем старую запись на новую
+                                removedDuplicates.Add(key);  // старая запись фактически «заменяется»
+
+                                uniqueRecords[oldIndex] = record;
+                                keyInfo[key] = (currentSumfin, oldIndex);
+                            }
+                            else if (currentSumfin == oldSumfin)
+                            {
+                                // SUMFIN одинаковый => оставляем первую (старую), а новая — дубликат
+                                removedDuplicates.Add(key);
+                            }
+                            else
+                            {
+                                // Новый SUMFIN меньше старого => новая запись - дубликат
+                                removedDuplicates.Add(key);
+                            }
                         }
                     }
                 }
             }
 
-            // Если не пропущен, делаем перезапись файла
+            
+            // Перезаписываем файл теми записями, что остались в uniqueRecords
             using (FileStream fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write))
             {
                 using (DBFWriter writer = new DBFWriter(fileStream))
                 {
                     writer.CharEncoding = Encoding.GetEncoding(866);
-                    writer.LanguageDriver = 0x65; 
+                    writer.LanguageDriver = 0x65;
 
                     writer.Fields = originalFields;
 
