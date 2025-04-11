@@ -1,0 +1,76 @@
+﻿<Window x:Class="DBFDuplicateRemover.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Удаление дубликатов из DBF" 
+        Height="350" 
+        Width="400">
+    <Grid>
+        <!-- Четыре строки: 
+             1) поле для пути 
+             2) флажок 
+             3) кнопка "Выбрать папку" 
+             4) кнопка "Запуск обработки" 
+        -->
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="120"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="50"/>
+        </Grid.RowDefinitions>
+
+        <!-- Поле для отображения выбранной папки (только чтение) -->
+        <TextBox Name="txtFolderPath"
+                 ToolTip="Папка, в которой будут проверяться .dbf файлы"
+                 IsReadOnly="True" 
+                 Margin="10" 
+                 Height="30" />
+
+        <!-- Флажок для управления очисткой поля MONTHDBT -->
+        <CheckBox Grid.Row="2"
+                  Name="chkClearMonthdbt"
+                  ToolTip="Очистка столбца MONTHDBT от любых значений в проверяемых файлах"
+                  Margin="20,10,0,10"
+                  Content="Очищать MONTHDBT"
+                  IsChecked="True" />
+
+        <!-- Кнопка для выбора папки -->
+        <Button Grid.Row="3" 
+                Content="Выбрать папку"
+                ToolTip="Указать папку, в которой находятся .dbf файлы для проверки"
+                Width="150" 
+                Height="30" 
+                Margin="20,10,0,10"
+                HorizontalAlignment="Left" 
+                Click="BtnSelectFolder_Click" />
+
+        <!-- Кнопка для запуска обработки -->
+        <Button Grid.Row="4" 
+                Content="Запуск обработки"
+                ToolTip="Запустить проверку .dbf файлов в выбранной папке"
+                Width="150" 
+                Height="30" 
+                Margin="20,10,0,10"
+                HorizontalAlignment="Left" 
+                Click="BtnProcess_Click" />
+        <Label Content="Обрабатывать файлы:" HorizontalAlignment="Left" Margin="17,0,0,0" Grid.Row="1" VerticalAlignment="Top"/>
+        <RadioButton x:Name="RadioB1" Content="Чистые файлы на отправку"
+                     ToolTip="Проверить незаполненные файлы. Проверяется только структура и дубликаты строк"
+                     HorizontalAlignment="Left" Margin="20,31,0,0" Grid.Row="1" VerticalAlignment="Top" IsChecked="True"/>
+        <RadioButton x:Name="RadioB2" Content="Полученные файлы с данными"
+                     ToolTip="Проверить полученные заполненные файлы.&#x0a;Проверяется структура, дата DTFACT, дубликаты строк, заполнены ли суммы или нет"
+                     HorizontalAlignment="Left" Margin="20,0,0,0" Grid.Row="1" VerticalAlignment="Center" Unchecked="RadioB2_Unchecked" Checked="RadioB2_Checked"/>
+        <CheckBox x:Name="chRenameFiles" Content="Переименовывать файлы с ошибками"
+                  ToolTip="Переименование файлов, в которых обнаружены ошибки. &#x0a;К имени файла в начале будет добавлено:&#x0a;!BAD_ при ошибке структуры&#x0a;!DATA_ при ошибке  даты в DTFACT&#x0a;!EMPTY_ при отсуствии каких либо сумм."
+                  HorizontalAlignment="Left" Margin="39,97,0,0" Grid.Row="1" VerticalAlignment="Top" IsEnabled="False" IsChecked="True"/>
+        <Rectangle HorizontalAlignment="Left" Height="1" Margin="26.3,104,0,0" Grid.Row="1" Stroke="Black" VerticalAlignment="Top" Width="12"/>
+        <Rectangle HorizontalAlignment="Left" Height="37" Margin="26.3,67,0,0" Grid.Row="1" Stroke="Black" VerticalAlignment="Top" Width="1"/>
+        <Label Content="Программу создали:" HorizontalAlignment="Left" Margin="232,22,0,0" Grid.Row="3" VerticalAlignment="Top"/>
+        <Label Content="Альков Ренат" Margin="252,41,0,0" Grid.Row="3" UseLayoutRounding="False" HorizontalAlignment="Left" VerticalAlignment="Top" Grid.RowSpan="2"/>
+        <Label Content="Кравченко Павел" HorizontalAlignment="Left" Margin="241,10,0,0" Grid.Row="4" VerticalAlignment="Top"/>
+        <CheckBox x:Name="chTranslitFiles" Content="Переименовывать файлы на латиницу"
+                  ToolTip="В имени файла оставлять только латинские маленькие буквы и&#x0a;цифры не в начале, а также символ подчеркивания.&#x0a;Все заглавные буквы заменяются строчными.&#x0a;Из начала имени файла убираются цифры.&#x0a;Все русские буквы заменяются латинскими аналогами.&#x0a;Убираются все лишние символы."
+                  HorizontalAlignment="Left" Margin="39,76,0,0" Grid.Row="1" VerticalAlignment="Top" IsEnabled="False" IsChecked="True"/>
+        <Rectangle HorizontalAlignment="Left" Height="1" Margin="26.3,83,0,0" Grid.Row="1" Stroke="Black" VerticalAlignment="Top" Width="12"/>
+    </Grid>
+</Window>

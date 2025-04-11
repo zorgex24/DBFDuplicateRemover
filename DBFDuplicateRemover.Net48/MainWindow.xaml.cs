@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography.Xml;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -338,8 +337,7 @@ namespace DBFDuplicateRemover
 
         private DuplicateRemovalResult RemoveDuplicates(string filePath)
         {
-            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-
+            
             var result = new DuplicateRemovalResult
             {
                 FileName = Path.GetFileName(filePath),
@@ -361,7 +359,7 @@ namespace DBFDuplicateRemover
                 = new Dictionary<string, (decimal SumFin, int Index)>();
 
             List<string> removedDuplicates = new List<string>();
-            List<int> DataKeys = new();
+            List<int> DataKeys = new List<int>();
 
             DBFField[] originalFields;
 
@@ -506,26 +504,30 @@ namespace DBFDuplicateRemover
         {
             // Определим соответствия кириллических букв и латинских
             var translitMap = new Dictionary<char, string>
-            {
-                {'а', "a"}, {'б', "b"}, {'в', "v"}, {'г', "g"}, {'д', "d"},
-                {'е', "e"}, {'ё', "e"}, {'ж', "zh"}, {'з', "z"}, {'и', "i"},
-                {'й', "y"}, {'к', "k"}, {'л', "l"}, {'м', "m"}, {'н', "n"},
-                {'о', "o"}, {'п', "p"}, {'р', "r"}, {'с', "s"}, {'т', "t"},
-                {'у', "u"}, {'ф', "f"}, {'х', "kh"}, {'ц', "ts"}, {'ч', "ch"},
-                {'ш', "sh"}, {'щ', "sch"}, {'ъ', ""}, {'ы', "y"}, {'ь', ""},
-                {'э', "e"}, {'ю', "yu"}, {'я', "ya"}
-            };
+    {
+        {'а', "a"}, {'б', "b"}, {'в', "v"}, {'г', "g"}, {'д', "d"},
+        {'е', "e"}, {'ё', "e"}, {'ж', "zh"}, {'з', "z"}, {'и', "i"},
+        {'й', "y"}, {'к', "k"}, {'л', "l"}, {'м', "m"}, {'н', "n"},
+        {'о', "o"}, {'п', "p"}, {'р', "r"}, {'с', "s"}, {'т', "t"},
+        {'у', "u"}, {'ф', "f"}, {'х', "kh"}, {'ц', "ts"}, {'ч', "ch"},
+        {'ш', "sh"}, {'щ', "sch"}, {'ъ', ""}, {'ы', "y"}, {'ь', ""},
+        {'э', "e"}, {'ю', "yu"}, {'я', "ya"}
+    };
 
-            StringBuilder result = new(input.Length);
+            StringBuilder result = new StringBuilder(input.Length);
 
             foreach (char c in input)
             {
-                // Используем GetValueOrDefault для получения значения по умолчанию
-                result.Append(translitMap.GetValueOrDefault(c, c.ToString()));
+                string translit;
+                if (translitMap.TryGetValue(c, out translit))
+                    result.Append(translit);
+                else
+                    result.Append(c);
             }
 
             return result.ToString();
         }
+
 
         private void RadioB2_Unchecked(object sender, RoutedEventArgs e)
         {
